@@ -21,6 +21,9 @@ authenticate to their cluster or add their own custom concrete classes here.
 
 import abc
 from kubernetes import client, config
+import os
+import urllib3
+from ..utils.kube_api_helpers import _kube_api_error_handling
 
 global api_client
 api_client = None
@@ -106,7 +109,10 @@ class TokenAuthentication(Authentication):
             elif self.skip_tls == False:
                 configuration.ssl_ca_cert = self.ca_cert_path
             else:
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                print("Insecure request warnings have been disabled")
                 configuration.verify_ssl = False
+
             api_client = client.ApiClient(configuration)
             client.AuthenticationApi(api_client).get_api_group()
             config_path = None
@@ -161,8 +167,23 @@ def config_check() -> str:
     """
     global config_path
     global api_client
+    home_directory = os.path.expanduser("~")
     if config_path == None and api_client == None:
-        config.load_kube_config()
+        if os.path.isfile("%s/.kube/config" % home_directory):
+            try:
+                config.load_kube_config()
+            except Exception as e:  # pragma: no cover
+                _kube_api_error_handling(e)
+        elif "KUBERNETES_PORT" in os.environ:
+            try:
+                config.load_incluster_config()
+            except Exception as e:  # pragma: no cover
+                _kube_api_error_handling(e)
+        else:
+            raise PermissionError(
+                "Action not permitted, have you put in correct/up-to-date auth credentials?"
+            )
+
     if config_path != None and api_client == None:
         return config_path
 

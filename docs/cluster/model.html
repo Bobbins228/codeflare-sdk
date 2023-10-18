@@ -72,6 +72,7 @@ class AppWrapperStatus(Enum):
     Defines the possible reportable states of an AppWrapper.
     &#34;&#34;&#34;
 
+    QUEUEING = &#34;queueing&#34;
     PENDING = &#34;pending&#34;
     RUNNING = &#34;running&#34;
     FAILED = &#34;failed&#34;
@@ -88,8 +89,9 @@ class CodeFlareClusterStatus(Enum):
     READY = 1
     STARTING = 2
     QUEUED = 3
-    FAILED = 4
-    UNKNOWN = 5
+    QUEUEING = 4
+    FAILED = 5
+    UNKNOWN = 6
 
 
 @dataclass
@@ -100,8 +102,10 @@ class RayCluster:
 
     name: str
     status: RayClusterStatus
-    min_workers: int
-    max_workers: int
+    head_cpus: int
+    head_mem: str
+    head_gpu: int
+    workers: int
     worker_mem_min: str
     worker_mem_max: str
     worker_cpu: int
@@ -186,6 +190,7 @@ class AppWrapper:
     Defines the possible reportable states of an AppWrapper.
     &#34;&#34;&#34;
 
+    QUEUEING = &#34;queueing&#34;
     PENDING = &#34;pending&#34;
     RUNNING = &#34;running&#34;
     FAILED = &#34;failed&#34;
@@ -212,6 +217,10 @@ class AppWrapper:
 <div class="desc"></div>
 </dd>
 <dt id="codeflare_sdk.cluster.model.AppWrapperStatus.PENDING"><code class="name">var <span class="ident">PENDING</span></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="codeflare_sdk.cluster.model.AppWrapperStatus.QUEUEING"><code class="name">var <span class="ident">QUEUEING</span></code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -243,8 +252,9 @@ class AppWrapper:
     READY = 1
     STARTING = 2
     QUEUED = 3
-    FAILED = 4
-    UNKNOWN = 5</code></pre>
+    QUEUEING = 4
+    FAILED = 5
+    UNKNOWN = 6</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -257,6 +267,10 @@ class AppWrapper:
 <div class="desc"></div>
 </dd>
 <dt id="codeflare_sdk.cluster.model.CodeFlareClusterStatus.QUEUED"><code class="name">var <span class="ident">QUEUED</span></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="codeflare_sdk.cluster.model.CodeFlareClusterStatus.QUEUEING"><code class="name">var <span class="ident">QUEUEING</span></code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -276,7 +290,7 @@ class AppWrapper:
 </dd>
 <dt id="codeflare_sdk.cluster.model.RayCluster"><code class="flex name class">
 <span>class <span class="ident">RayCluster</span></span>
-<span>(</span><span>name: str, status: <a title="codeflare_sdk.cluster.model.RayClusterStatus" href="#codeflare_sdk.cluster.model.RayClusterStatus">RayClusterStatus</a>, min_workers: int, max_workers: int, worker_mem_min: str, worker_mem_max: str, worker_cpu: int, worker_gpu: int, namespace: str, dashboard: str)</span>
+<span>(</span><span>name: str, status: <a title="codeflare_sdk.cluster.model.RayClusterStatus" href="#codeflare_sdk.cluster.model.RayClusterStatus">RayClusterStatus</a>, head_cpus: int, head_mem: str, head_gpu: int, workers: int, worker_mem_min: str, worker_mem_max: str, worker_cpu: int, worker_gpu: int, namespace: str, dashboard: str)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>For storing information about a Ray cluster.</p></div>
@@ -291,8 +305,10 @@ class AppWrapper:
 
     name: str
     status: RayClusterStatus
-    min_workers: int
-    max_workers: int
+    head_cpus: int
+    head_mem: str
+    head_gpu: int
+    workers: int
     worker_mem_min: str
     worker_mem_max: str
     worker_cpu: int
@@ -306,11 +322,15 @@ class AppWrapper:
 <dd>
 <div class="desc"></div>
 </dd>
-<dt id="codeflare_sdk.cluster.model.RayCluster.max_workers"><code class="name">var <span class="ident">max_workers</span> : int</code></dt>
+<dt id="codeflare_sdk.cluster.model.RayCluster.head_cpus"><code class="name">var <span class="ident">head_cpus</span> : int</code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
-<dt id="codeflare_sdk.cluster.model.RayCluster.min_workers"><code class="name">var <span class="ident">min_workers</span> : int</code></dt>
+<dt id="codeflare_sdk.cluster.model.RayCluster.head_gpu"><code class="name">var <span class="ident">head_gpu</span> : int</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="codeflare_sdk.cluster.model.RayCluster.head_mem"><code class="name">var <span class="ident">head_mem</span> : str</code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -339,6 +359,10 @@ class AppWrapper:
 <div class="desc"></div>
 </dd>
 <dt id="codeflare_sdk.cluster.model.RayCluster.worker_mem_min"><code class="name">var <span class="ident">worker_mem_min</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="codeflare_sdk.cluster.model.RayCluster.workers"><code class="name">var <span class="ident">workers</span> : int</code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -421,15 +445,17 @@ class AppWrapper:
 <li><code><a title="codeflare_sdk.cluster.model.AppWrapperStatus.DELETED" href="#codeflare_sdk.cluster.model.AppWrapperStatus.DELETED">DELETED</a></code></li>
 <li><code><a title="codeflare_sdk.cluster.model.AppWrapperStatus.FAILED" href="#codeflare_sdk.cluster.model.AppWrapperStatus.FAILED">FAILED</a></code></li>
 <li><code><a title="codeflare_sdk.cluster.model.AppWrapperStatus.PENDING" href="#codeflare_sdk.cluster.model.AppWrapperStatus.PENDING">PENDING</a></code></li>
+<li><code><a title="codeflare_sdk.cluster.model.AppWrapperStatus.QUEUEING" href="#codeflare_sdk.cluster.model.AppWrapperStatus.QUEUEING">QUEUEING</a></code></li>
 <li><code><a title="codeflare_sdk.cluster.model.AppWrapperStatus.RUNNING" href="#codeflare_sdk.cluster.model.AppWrapperStatus.RUNNING">RUNNING</a></code></li>
 <li><code><a title="codeflare_sdk.cluster.model.AppWrapperStatus.RUNNING_HOLD_COMPLETION" href="#codeflare_sdk.cluster.model.AppWrapperStatus.RUNNING_HOLD_COMPLETION">RUNNING_HOLD_COMPLETION</a></code></li>
 </ul>
 </li>
 <li>
 <h4><code><a title="codeflare_sdk.cluster.model.CodeFlareClusterStatus" href="#codeflare_sdk.cluster.model.CodeFlareClusterStatus">CodeFlareClusterStatus</a></code></h4>
-<ul class="">
+<ul class="two-column">
 <li><code><a title="codeflare_sdk.cluster.model.CodeFlareClusterStatus.FAILED" href="#codeflare_sdk.cluster.model.CodeFlareClusterStatus.FAILED">FAILED</a></code></li>
 <li><code><a title="codeflare_sdk.cluster.model.CodeFlareClusterStatus.QUEUED" href="#codeflare_sdk.cluster.model.CodeFlareClusterStatus.QUEUED">QUEUED</a></code></li>
+<li><code><a title="codeflare_sdk.cluster.model.CodeFlareClusterStatus.QUEUEING" href="#codeflare_sdk.cluster.model.CodeFlareClusterStatus.QUEUEING">QUEUEING</a></code></li>
 <li><code><a title="codeflare_sdk.cluster.model.CodeFlareClusterStatus.READY" href="#codeflare_sdk.cluster.model.CodeFlareClusterStatus.READY">READY</a></code></li>
 <li><code><a title="codeflare_sdk.cluster.model.CodeFlareClusterStatus.STARTING" href="#codeflare_sdk.cluster.model.CodeFlareClusterStatus.STARTING">STARTING</a></code></li>
 <li><code><a title="codeflare_sdk.cluster.model.CodeFlareClusterStatus.UNKNOWN" href="#codeflare_sdk.cluster.model.CodeFlareClusterStatus.UNKNOWN">UNKNOWN</a></code></li>
@@ -439,8 +465,9 @@ class AppWrapper:
 <h4><code><a title="codeflare_sdk.cluster.model.RayCluster" href="#codeflare_sdk.cluster.model.RayCluster">RayCluster</a></code></h4>
 <ul class="two-column">
 <li><code><a title="codeflare_sdk.cluster.model.RayCluster.dashboard" href="#codeflare_sdk.cluster.model.RayCluster.dashboard">dashboard</a></code></li>
-<li><code><a title="codeflare_sdk.cluster.model.RayCluster.max_workers" href="#codeflare_sdk.cluster.model.RayCluster.max_workers">max_workers</a></code></li>
-<li><code><a title="codeflare_sdk.cluster.model.RayCluster.min_workers" href="#codeflare_sdk.cluster.model.RayCluster.min_workers">min_workers</a></code></li>
+<li><code><a title="codeflare_sdk.cluster.model.RayCluster.head_cpus" href="#codeflare_sdk.cluster.model.RayCluster.head_cpus">head_cpus</a></code></li>
+<li><code><a title="codeflare_sdk.cluster.model.RayCluster.head_gpu" href="#codeflare_sdk.cluster.model.RayCluster.head_gpu">head_gpu</a></code></li>
+<li><code><a title="codeflare_sdk.cluster.model.RayCluster.head_mem" href="#codeflare_sdk.cluster.model.RayCluster.head_mem">head_mem</a></code></li>
 <li><code><a title="codeflare_sdk.cluster.model.RayCluster.name" href="#codeflare_sdk.cluster.model.RayCluster.name">name</a></code></li>
 <li><code><a title="codeflare_sdk.cluster.model.RayCluster.namespace" href="#codeflare_sdk.cluster.model.RayCluster.namespace">namespace</a></code></li>
 <li><code><a title="codeflare_sdk.cluster.model.RayCluster.status" href="#codeflare_sdk.cluster.model.RayCluster.status">status</a></code></li>
@@ -448,6 +475,7 @@ class AppWrapper:
 <li><code><a title="codeflare_sdk.cluster.model.RayCluster.worker_gpu" href="#codeflare_sdk.cluster.model.RayCluster.worker_gpu">worker_gpu</a></code></li>
 <li><code><a title="codeflare_sdk.cluster.model.RayCluster.worker_mem_max" href="#codeflare_sdk.cluster.model.RayCluster.worker_mem_max">worker_mem_max</a></code></li>
 <li><code><a title="codeflare_sdk.cluster.model.RayCluster.worker_mem_min" href="#codeflare_sdk.cluster.model.RayCluster.worker_mem_min">worker_mem_min</a></code></li>
+<li><code><a title="codeflare_sdk.cluster.model.RayCluster.workers" href="#codeflare_sdk.cluster.model.RayCluster.workers">workers</a></code></li>
 </ul>
 </li>
 <li>

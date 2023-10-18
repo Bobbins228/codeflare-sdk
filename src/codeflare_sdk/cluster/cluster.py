@@ -38,6 +38,7 @@ from .model import (
 from kubernetes import client, config
 import yaml
 import os
+import requests
 
 
 class Cluster:
@@ -61,6 +62,26 @@ class Cluster:
         self.app_wrapper_yaml = self.create_app_wrapper()
         self.app_wrapper_name = self.app_wrapper_yaml.split(".")[0]
 
+    def evaluate_dispatch_priority(self):
+        priority_class = self.config.dispatch_priority
+
+        try:
+            config_check()
+            api_instance = client.CustomObjectsApi(api_config_handler())
+            priority_classes = api_instance.list_cluster_custom_object(
+                group="scheduling.k8s.io",
+                version="v1",
+                plural="priorityclasses",
+            )
+        except Exception as e:  # pragma: no cover
+            return _kube_api_error_handling(e)
+
+        for pc in priority_classes["items"]:
+            if pc["metadata"]["name"] == priority_class:
+                return pc["value"]
+        print(f"Priority class {priority_class} is not available in the cluster")
+        return None
+
     def create_app_wrapper(self):
         """
         Called upon cluster object creation, creates an AppWrapper yaml based on
@@ -76,14 +97,27 @@ class Cluster:
                     f"Namespace {self.config.namespace} is of type {type(self.config.namespace)}. Check your Kubernetes Authentication."
                 )
 
+        # Before attempting to create the cluster AW, let's evaluate the ClusterConfig
+        if self.config.dispatch_priority:
+            priority_val = self.evaluate_dispatch_priority()
+            if priority_val == None:
+                raise ValueError(
+                    "Invalid Cluster Configuration, AppWrapper not generated"
+                )
+        else:
+            priority_val = None
+
         name = self.config.name
         namespace = self.config.namespace
+        head_cpus = self.config.head_cpus
+        head_memory = self.config.head_memory
+        head_gpus = self.config.head_gpus
         min_cpu = self.config.min_cpus
         max_cpu = self.config.max_cpus
         min_memory = self.config.min_memory
         max_memory = self.config.max_memory
-        gpu = self.config.gpu
-        workers = self.config.max_worker
+        gpu = self.config.num_gpus
+        workers = self.config.num_workers
         template = self.config.template
         image = self.config.image
         instascale = self.config.instascale
@@ -91,9 +125,13 @@ class Cluster:
         env = self.config.envs
         local_interactive = self.config.local_interactive
         image_pull_secrets = self.config.image_pull_secrets
+        dispatch_priority = self.config.dispatch_priority
         return generate_appwrapper(
             name=name,
             namespace=namespace,
+            head_cpus=head_cpus,
+            head_memory=head_memory,
+            head_gpus=head_gpus,
             min_cpu=min_cpu,
             max_cpu=max_cpu,
             min_memory=min_memory,
@@ -107,6 +145,8 @@ class Cluster:
             env=env,
             local_interactive=local_interactive,
             image_pull_secrets=image_pull_secrets,
+            dispatch_priority=dispatch_priority,
+            priority_val=priority_val,
         )
 
     # creates a new cluster with the provided or default spec
@@ -122,7 +162,7 @@ class Cluster:
             with open(self.app_wrapper_yaml) as f:
                 aw = yaml.load(f, Loader=yaml.FullLoader)
             api_instance.create_namespaced_custom_object(
-                group="mcad.ibm.com",
+                group="workload.codeflare.dev",
                 version="v1beta1",
                 namespace=namespace,
                 plural="appwrappers",
@@ -141,7 +181,7 @@ class Cluster:
             config_check()
             api_instance = client.CustomObjectsApi(api_config_handler())
             api_instance.delete_namespaced_custom_object(
-                group="mcad.ibm.com",
+                group="workload.codeflare.dev",
                 version="v1beta1",
                 namespace=namespace,
                 plural="appwrappers",
@@ -176,9 +216,15 @@ class Cluster:
                 ready = False
                 status = CodeFlareClusterStatus.FAILED  # should deleted be separate
                 return status, ready  # exit early, no need to check ray status
-            elif appwrapper.status in [AppWrapperStatus.PENDING]:
+            elif appwrapper.status in [
+                AppWrapperStatus.PENDING,
+                AppWrapperStatus.QUEUEING,
+            ]:
                 ready = False
-                status = CodeFlareClusterStatus.QUEUED
+                if appwrapper.status == AppWrapperStatus.PENDING:
+                    status = CodeFlareClusterStatus.QUEUED
+                else:
+                    status = CodeFlareClusterStatus.QUEUEING
                 if print_to_console:
                     pretty_print.print_app_wrappers_status([appwrapper])
                 return (
@@ -201,7 +247,7 @@ class Cluster:
 
             if print_to_console:
                 # overriding the number of gpus with requested
-                cluster.worker_gpu = self.config.gpu
+                cluster.worker_gpu = self.config.num_gpus
                 pretty_print.print_cluster_status(cluster)
         elif print_to_console:
             if status == CodeFlareClusterStatus.UNKNOWN:
@@ -211,13 +257,21 @@ class Cluster:
 
         return status, ready
 
-    def wait_ready(self, timeout: Optional[int] = None):
+    def is_dashboard_ready(self) -> bool:
+        response = requests.get(self.cluster_dashboard_uri(), timeout=5)
+        if response.status_code == 200:
+            return True
+        else:
+            return False
+
+    def wait_ready(self, timeout: Optional[int] = None, dashboard_check: bool = True):
         """
         Waits for requested cluster to be ready, up to an optional timeout (s).
         Checks every five seconds.
         """
         print("Waiting for requested resources to be set up...")
         ready = False
+        dashboard_ready = False
         status = None
         time = 0
         while not ready:
@@ -228,10 +282,24 @@ class Cluster:
                 )
             if not ready:
                 if timeout and time >= timeout:
-                    raise TimeoutError(f"wait() timed out after waiting {timeout}s")
+                    raise TimeoutError(
+                        f"wait() timed out after waiting {timeout}s for cluster to be ready"
+                    )
                 sleep(5)
                 time += 5
-        print("Requested cluster up and running!")
+        print("Requested cluster is up and running!")
+
+        while dashboard_check and not dashboard_ready:
+            dashboard_ready = self.is_dashboard_ready()
+            if not dashboard_ready:
+                if timeout and time >= timeout:
+                    raise TimeoutError(
+                        f"wait() timed out after waiting {timeout}s for dashboard to be ready"
+                    )
+                sleep(5)
+                time += 5
+        if dashboard_ready:
+            print("Dashboard is ready!")
 
     def details(self, print_to_console: bool = True) -> RayCluster:
         cluster = _copy_to_ray(self)
@@ -263,7 +331,8 @@ class Cluster:
 
         for route in routes["items"]:
             if route["metadata"]["name"] == f"ray-dashboard-{self.config.name}":
-                return f"http://{route['spec']['host']}"
+                protocol = "https" if route["spec"].get("tls") else "http"
+                return f"{protocol}://{route['spec']['host']}"
         return "Dashboard route not available yet, have you run cluster.up()?"
 
     def list_jobs(self) -> List:
@@ -318,8 +387,7 @@ class Cluster:
             name=rc["metadata"]["name"],
             namespace=rc["metadata"]["namespace"],
             machine_types=machine_types,
-            min_worker=rc["spec"]["workerGroupSpecs"][0]["minReplicas"],
-            max_worker=rc["spec"]["workerGroupSpecs"][0]["maxReplicas"],
+            num_workers=rc["spec"]["workerGroupSpecs"][0]["minReplicas"],
             min_cpus=rc["spec"]["workerGroupSpecs"][0]["template"]["spec"][
                 "containers"
             ][0]["resources"]["requests"]["cpu"],
@@ -336,9 +404,9 @@ class Cluster:
                     "resources"
                 ]["limits"]["memory"][:-1]
             ),
-            gpu=rc["spec"]["workerGroupSpecs"][0]["template"]["spec"]["containers"][0][
-                "resources"
-            ]["limits"]["nvidia.com/gpu"],
+            num_gpus=rc["spec"]["workerGroupSpecs"][0]["template"]["spec"][
+                "containers"
+            ][0]["resources"]["limits"]["nvidia.com/gpu"],
             instascale=True if machine_types else False,
             image=rc["spec"]["workerGroupSpecs"][0]["template"]["spec"]["containers"][
                 0
@@ -406,8 +474,8 @@ def get_current_namespace():  # pragma: no cover
 
 def get_cluster(cluster_name: str, namespace: str = "default"):
     try:
-        config.load_kube_config()
-        api_instance = client.CustomObjectsApi()
+        config_check()
+        api_instance = client.CustomObjectsApi(api_config_handler())
         rcs = api_instance.list_namespaced_custom_object(
             group="ray.io",
             version="v1alpha1",
@@ -428,7 +496,7 @@ def get_cluster(cluster_name: str, namespace: str = "default"):
 # private methods
 def _get_ingress_domain():
     try:
-        config.load_kube_config()
+        config_check()
         api_client = client.CustomObjectsApi(api_config_handler())
         ingress = api_client.get_cluster_custom_object(
             "config.openshift.io", "v1", "ingresses", "cluster"
@@ -443,7 +511,7 @@ def _app_wrapper_status(name, namespace="default") -> Optional[AppWrapper]:
         config_check()
         api_instance = client.CustomObjectsApi(api_config_handler())
         aws = api_instance.list_namespaced_custom_object(
-            group="mcad.ibm.com",
+            group="workload.codeflare.dev",
             version="v1beta1",
             namespace=namespace,
             plural="appwrappers",
@@ -504,7 +572,7 @@ def _get_app_wrappers(
         config_check()
         api_instance = client.CustomObjectsApi(api_config_handler())
         aws = api_instance.list_namespaced_custom_object(
-            group="mcad.ibm.com",
+            group="workload.codeflare.dev",
             version="v1beta1",
             namespace=namespace,
             plural="appwrappers",
@@ -523,7 +591,7 @@ def _get_app_wrappers(
 
 
 def _map_to_ray_cluster(rc) -> Optional[RayCluster]:
-    if "state" in rc["status"]:
+    if "status" in rc and "state" in rc["status"]:
         status = RayClusterStatus(rc["status"]["state"].lower())
     else:
         status = RayClusterStatus.UNKNOWN
@@ -539,14 +607,14 @@ def _map_to_ray_cluster(rc) -> Optional[RayCluster]:
     ray_route = None
     for route in routes["items"]:
         if route["metadata"]["name"] == f"ray-dashboard-{rc['metadata']['name']}":
-            ray_route = route["spec"]["host"]
+            protocol = "https" if route["spec"].get("tls") else "http"
+            ray_route = f"{protocol}://{route['spec']['host']}"
 
     return RayCluster(
         name=rc["metadata"]["name"],
         status=status,
         # for now we are not using autoscaling so same replicas is fine
-        min_workers=rc["spec"]["workerGroupSpecs"][0]["replicas"],
-        max_workers=rc["spec"]["workerGroupSpecs"][0]["replicas"],
+        workers=rc["spec"]["workerGroupSpecs"][0]["replicas"],
         worker_mem_max=rc["spec"]["workerGroupSpecs"][0]["template"]["spec"][
             "containers"
         ][0]["resources"]["limits"]["memory"],
@@ -559,15 +627,31 @@ def _map_to_ray_cluster(rc) -> Optional[RayCluster]:
         worker_gpu=0,  # hard to detect currently how many gpus, can override it with what the user asked for
         namespace=rc["metadata"]["namespace"],
         dashboard=ray_route,
+        head_cpus=rc["spec"]["headGroupSpec"]["template"]["spec"]["containers"][0][
+            "resources"
+        ]["limits"]["cpu"],
+        head_mem=rc["spec"]["headGroupSpec"]["template"]["spec"]["containers"][0][
+            "resources"
+        ]["limits"]["memory"],
+        head_gpu=rc["spec"]["headGroupSpec"]["template"]["spec"]["containers"][0][
+            "resources"
+        ]["limits"]["nvidia.com/gpu"],
     )
 
 
 def _map_to_app_wrapper(aw) -> AppWrapper:
+    if "status" in aw and "canrun" in aw["status"]:
+        return AppWrapper(
+            name=aw["metadata"]["name"],
+            status=AppWrapperStatus(aw["status"]["state"].lower()),
+            can_run=aw["status"]["canrun"],
+            job_state=aw["status"]["queuejobstate"],
+        )
     return AppWrapper(
         name=aw["metadata"]["name"],
-        status=AppWrapperStatus(aw["status"]["state"].lower()),
-        can_run=aw["status"]["canrun"],
-        job_state=aw["status"]["queuejobstate"],
+        status=AppWrapperStatus("queueing"),
+        can_run=False,
+        job_state="Still adding to queue",
     )
 
 
@@ -575,14 +659,16 @@ def _copy_to_ray(cluster: Cluster) -> RayCluster:
     ray = RayCluster(
         name=cluster.config.name,
         status=cluster.status(print_to_console=False)[0],
-        min_workers=cluster.config.min_worker,
-        max_workers=cluster.config.max_worker,
+        workers=cluster.config.num_workers,
         worker_mem_min=cluster.config.min_memory,
         worker_mem_max=cluster.config.max_memory,
         worker_cpu=cluster.config.min_cpus,
-        worker_gpu=cluster.config.gpu,
+        worker_gpu=cluster.config.num_gpus,
         namespace=cluster.config.namespace,
         dashboard=cluster.cluster_dashboard_uri(),
+        head_cpus=cluster.config.head_cpus,
+        head_mem=cluster.config.head_memory,
+        head_gpu=cluster.config.head_gpus,
     )
     if ray.status == CodeFlareClusterStatus.READY:
         ray.status = RayClusterStatus.READY

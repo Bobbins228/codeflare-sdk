@@ -1,0 +1,18 @@
+# This workflow will build the CodeFlare Operator image and push it to the opendatahub image registry as well as update versions in the MakeFile and README
+
+name: Fork Sync
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: tgymnich/fork-sync@v1.8
+      with:
+        token: ${{ secrets.CODEFLARE_MACHINE_ACCOUNT_TOKEN }}
+        base: main
+        head: main

@@ -1,3 +1,5 @@
 # Pre-Commit Build Artifacts
 
-This directory contains the artifacts required to build the codeflare-sdk pre-commit image. As of right now, we will need to manually update `requirements-dev.txt` in this directory as well.
+This directory contains the artifacts required to build the codeflare-sdk pre-commit image.
+
+To build the image run `podman build -f .github/build/Containerfile .` from the root directory.
