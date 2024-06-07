@@ -16,6 +16,6 @@ from .cluster import (
     list_all_clusters,
 )
 
-from .job import RayJobClient
+from .job import RayJobClient, JobDefinition, Job, DDPJobDefinition, DDPJob
 
 from .utils import generate_cert
