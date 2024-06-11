@@ -8,6 +8,7 @@ from codeflare_sdk import (
 import pytest
 import ray
 import math
+from time import sleep
 
 from support import *
 
@@ -45,11 +46,51 @@ class TestRayLocalInteractiveOauth:
                 max_memory=2,
                 num_gpus=0,
                 image=ray_image,
-                write_to_file=True,
+                write_to_file=False,
                 verify_tls=False,
             )
         )
         cluster.up()
+        sleep(60)
+        api_instance = client.CustomObjectsApi()
+        rcs = api_instance.list_namespaced_custom_object(
+            group="ray.io",
+            version="v1",
+            namespace=self.namespace,
+            plural="rayclusters",
+        )
+        print("------------------ Ray Cluster ------------------")
+        for rc in rcs["items"]:
+            print(rc)
+        print("------------------ EVENTS ------------------")
+        v1 = client.CoreV1Api()
+        print(f"Events in namespace: {self.namespace}")
+        try:
+            events = v1.list_namespaced_event(namespace=self.namespace).items
+            for event in events:
+                print(
+                    f"Event: {event.metadata.name}, Reason: {event.reason}, Message: {event.message}, Timestamp: {event.last_timestamp}"
+                )
+        except client.exceptions.ApiException as e:
+            print(f"Exception when calling CoreV1Api->list_namespaced_event: {e}")
+
+        print("------------------ Workloads ------------------")
+        api_instance = client.CustomObjectsApi()
+        try:
+            workloads = api_instance.list_namespaced_custom_object(
+                "kueue.x-k8s.io", "v1beta1", self.namespace, "workloads"
+            )
+            for workload in workloads.get("items", []):
+                name = workload["metadata"]["name"]
+                status = workload.get("status", {})
+                print(
+                    f"Workload: {name}, Namespace: {self.namespace}, Status: {status}"
+                )
+        except client.exceptions.ApiException as e:
+            print(
+                f"Exception when calling CustomObjectsApi->list_namespaced_custom_object: {e}"
+            )
+
         cluster.wait_ready()
 
         generate_cert.generate_tls_cert(cluster_name, self.namespace)

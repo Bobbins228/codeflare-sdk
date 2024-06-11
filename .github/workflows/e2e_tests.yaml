@@ -79,7 +79,7 @@ jobs:
       - name: Set up specific Python version
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.9.18'
           cache: 'pip' # caching pip dependencies
 
       - name: Setup and start KinD cluster
@@ -98,39 +98,14 @@ jobs:
           kubectl wait --timeout=120s --for=condition=Available=true deployment -n openshift-operators codeflare-operator-manager
           cd ..
 
-      - name: Add user to KinD
-        uses: ./common/github-actions/kind-add-user
-        with:
-          user-name: sdk-user
-
       - name: Add kueue resources
         run: kubectl apply --server-side -f "https://github.com/kubernetes-sigs/kueue/releases/download/v0.6.2/manifests.yaml"
-
-      - name: Configure RBAC for sdk user with limited permissions
-        run: |
-          kubectl create clusterrole list-ingresses --verb=get,list --resource=ingresses
-          kubectl create clusterrolebinding sdk-user-list-ingresses --clusterrole=list-ingresses --user=sdk-user
-          kubectl create clusterrole namespace-creator --verb=get,list,create,delete,patch --resource=namespaces
-          kubectl create clusterrolebinding sdk-user-namespace-creator --clusterrole=namespace-creator --user=sdk-user
-          kubectl create clusterrole raycluster-creator --verb=get,list,create,delete,patch --resource=rayclusters
-          kubectl create clusterrolebinding sdk-user-raycluster-creator --clusterrole=raycluster-creator --user=sdk-user
-          kubectl create clusterrole appwrapper-creator --verb=get,list,create,delete,patch --resource=appwrappers
-          kubectl create clusterrolebinding sdk-user-appwrapper-creator --clusterrole=appwrapper-creator --user=sdk-user
-          kubectl create clusterrole resourceflavor-creator --verb=get,list,create,delete --resource=resourceflavors
-          kubectl create clusterrolebinding sdk-user-resourceflavor-creator --clusterrole=resourceflavor-creator --user=sdk-user
-          kubectl create clusterrole clusterqueue-creator --verb=get,list,create,delete,patch --resource=clusterqueues
-          kubectl create clusterrolebinding sdk-user-clusterqueue-creator --clusterrole=clusterqueue-creator --user=sdk-user
-          kubectl create clusterrole localqueue-creator --verb=get,list,create,delete,patch --resource=localqueues
-          kubectl create clusterrolebinding sdk-user-localqueue-creator --clusterrole=localqueue-creator --user=sdk-user
-          kubectl create clusterrole list-secrets --verb=get,list --resource=secrets
-          kubectl create clusterrolebinding sdk-user-list-secrets --clusterrole=list-secrets --user=sdk-user
-          kubectl config use-context sdk-user
 
       - name: Run e2e tests
         run: |
           export CODEFLARE_TEST_OUTPUT_DIR=${{ env.TEMP_DIR }}
           echo "CODEFLARE_TEST_OUTPUT_DIR=${CODEFLARE_TEST_OUTPUT_DIR}" >> $GITHUB_ENV
-
+          python --version
           set -euo pipefail
           pip install poetry
           poetry install --with test,docs
