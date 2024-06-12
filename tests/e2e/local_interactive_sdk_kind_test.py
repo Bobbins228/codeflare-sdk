@@ -83,6 +83,7 @@ class TestRayLocalInteractiveOauth:
             for workload in workloads.get("items", []):
                 name = workload["metadata"]["name"]
                 status = workload.get("status", {})
+                print(workload)
                 print(
                     f"Workload: {name}, Namespace: {self.namespace}, Status: {status}"
                 )

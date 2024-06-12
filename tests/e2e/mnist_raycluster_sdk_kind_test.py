@@ -80,6 +80,7 @@ class TestRayClusterSDKKind:
                 "kueue.x-k8s.io", "v1beta1", self.namespace, "workloads"
             )
             for workload in workloads.get("items", []):
+                print(workload)
                 name = workload["metadata"]["name"]
                 status = workload.get("status", {})
                 print(
