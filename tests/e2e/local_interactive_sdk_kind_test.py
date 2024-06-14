@@ -11,6 +11,7 @@ import math
 from time import sleep
 
 from support import *
+import yaml
 
 
 @pytest.mark.kind
@@ -91,7 +92,29 @@ class TestRayLocalInteractiveOauth:
             print(
                 f"Exception when calling CustomObjectsApi->list_namespaced_custom_object: {e}"
             )
+        print("------------- PODS ----------------")
+        try:
+            pods = v1.list_namespaced_pod(self.namespace)
+        except client.exceptions.ApiException as e:
+            print(f"Exception when calling CoreV1Api->list_namespaced_pod: {e}")
+            exit(1)
 
+        # Loop through the list of pods and print the YAML of those that start with 'test-name-head'
+        for pod in pods.items:
+            pod_name = pod.metadata.name
+            if pod_name.startswith("test-ray-cluster-li"):
+                print(f"YAML configuration for pod: {pod_name}")
+                try:
+                    pod_detail = v1.read_namespaced_pod(
+                        name=pod_name, namespace=self.namespace
+                    )
+                    pod_dict = pod_detail.to_dict()
+                    print("---------------------------------")
+                    print(yaml.dump(pod_dict, default_flow_style=False))
+                except client.exceptions.ApiException as e:
+                    print(
+                        f"Exception when calling CoreV1Api->read_namespaced_pod for pod {pod_name}: {e}"
+                    )
         cluster.wait_ready()
 
         generate_cert.generate_tls_cert(cluster_name, self.namespace)
