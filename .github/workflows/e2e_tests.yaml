@@ -62,7 +62,7 @@ jobs:
       - name: Checkout CodeFlare operator repository
         uses: actions/checkout@v4
         with:
-          repository: Bobbins228/codeflare-operator
+          repository: project-codeflare/codeflare-operator
           path: codeflare-operator
 
       - name: Set Go
@@ -89,9 +89,8 @@ jobs:
         id: deploy
         run: |
           cd codeflare-operator
-          git fetch origin
-          git checkout update-cert-image
           echo Setting up CodeFlare stack
+          sed -i 's|certGeneratorImage: .*|certGeneratorImage: quay.io/project-codeflare/ray:2.20.0-py39-cu118|' config/e2e/config.yaml
           make setup-e2e
           echo Deploying CodeFlare operator
           IMG="${REGISTRY_ADDRESS}"/codeflare-operator
