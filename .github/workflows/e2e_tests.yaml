@@ -62,7 +62,7 @@ jobs:
       - name: Checkout CodeFlare operator repository
         uses: actions/checkout@v4
         with:
-          repository: project-codeflare/codeflare-operator
+          repository: Bobbins228/codeflare-operator
           path: codeflare-operator
 
       - name: Set Go
@@ -89,6 +89,8 @@ jobs:
         id: deploy
         run: |
           cd codeflare-operator
+          git fetch origin
+          git checkout update-cert-image
           echo Setting up CodeFlare stack
           make setup-e2e
           echo Deploying CodeFlare operator
