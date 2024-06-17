@@ -11,7 +11,7 @@ For guided demos and basics walkthroughs, check out the following links:
 - Note that these notebooks will work with the latest `codeflare-sdk` PyPI release. For testing and experimentation with `main` branch, please use the [preview notebooks](https://github.com/project-codeflare/codeflare-sdk/tree/main/demo-notebooks/guided-demos/preview_nbs)
 - Additionally, we have a [video walkthrough](https://www.youtube.com/watch?v=U76iIfd9EmE) of these basic demos from June, 2023
 
-Full documentation can be found [here](https://project-codeflare.github.io/codeflare-sdk/)
+Full documentation can be found [here](https://project-codeflare.github.io/codeflare-sdk/detailed-documentation)
 
 ## Installation
 
@@ -51,9 +51,14 @@ To build the codeflare-sdk pre-commit image run `podman build -f .github/build/C
 ### Testing
 
 - To install codeflare-sdk in editable mode, run `pip install -e .` from the repo root.
-- To run the unit tests, run `pytest -v tests/unit_test.py`
 - Any new test functions/scripts can be added into the `tests` folder
 - NOTE: Functional tests coming soon, will live in `tests/func_test.py`
+
+#### Unit Testing
+- To run the unit tests, run `pytest -v tests/unit_test.py`
+
+#### Local e2e Testing
+- Please follow the [e2e documentation](https://github.com/project-codeflare/codeflare-sdk/blob/main/docs/e2e.md)
 
 #### Code Coverage
 

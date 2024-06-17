@@ -19,10 +19,13 @@ API error handling or wrapping.
 
 import executing
 from kubernetes import client, config
+from urllib3.util import parse_url
 
 
 # private methods
-def _kube_api_error_handling(e: Exception):  # pragma: no cover
+def _kube_api_error_handling(
+    e: Exception, print_error: bool = True
+):  # pragma: no cover
     perm_msg = (
         "Action not permitted, have you put in correct/up-to-date auth credentials?"
     )
@@ -31,14 +34,18 @@ def _kube_api_error_handling(e: Exception):  # pragma: no cover
     if type(e) == config.ConfigException:
         raise PermissionError(perm_msg)
     if type(e) == executing.executing.NotOneValueFound:
-        print(nf_msg)
+        if print_error:
+            print(nf_msg)
         return
     if type(e) == client.ApiException:
         if e.reason == "Not Found":
-            print(nf_msg)
+            if print_error:
+                print(nf_msg)
             return
         elif e.reason == "Unauthorized" or e.reason == "Forbidden":
-            raise PermissionError(perm_msg)
+            if print_error:
+                print(perm_msg)
+            return
         elif e.reason == "Conflict":
             raise FileExistsError(exists_msg)
     raise e

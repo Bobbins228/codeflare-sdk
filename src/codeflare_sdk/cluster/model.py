@@ -27,25 +27,27 @@ class RayClusterStatus(Enum):
     Defines the possible reportable states of a Ray cluster.
     """
 
-    # https://github.com/ray-project/kuberay/blob/master/ray-operator/apis/ray/v1alpha1/raycluster_types.go#L95
+    # https://github.com/ray-project/kuberay/blob/master/ray-operator/apis/ray/v1/raycluster_types.go#L112-L117
     READY = "ready"
     UNHEALTHY = "unhealthy"
     FAILED = "failed"
     UNKNOWN = "unknown"
+    SUSPENDED = "suspended"
 
 
 class AppWrapperStatus(Enum):
     """
-    Defines the possible reportable states of an AppWrapper.
+    Defines the possible reportable phases of an AppWrapper.
     """
 
-    QUEUEING = "queueing"
-    PENDING = "pending"
+    SUSPENDED = "suspended"
+    RESUMING = "resuming"
     RUNNING = "running"
+    RESETTING = "resetting"
+    SUSPENDING = "suspending"
+    SUCCEEDED = "succeeded"
     FAILED = "failed"
-    DELETED = "deleted"
-    COMPLETED = "completed"
-    RUNNING_HOLD_COMPLETION = "runningholdcompletion"
+    TERMINATING = "terminating"
 
 
 class CodeFlareClusterStatus(Enum):
@@ -59,6 +61,7 @@ class CodeFlareClusterStatus(Enum):
     QUEUEING = 4
     FAILED = 5
     UNKNOWN = 6
+    SUSPENDED = 7
 
 
 @dataclass
@@ -89,5 +92,3 @@ class AppWrapper:
 
     name: str
     status: AppWrapperStatus
-    can_run: bool
-    job_state: str

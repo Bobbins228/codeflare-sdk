@@ -17,13 +17,19 @@ This sub-module exists primarily to be used internally by the Cluster object
 (in the cluster sub-module) for AppWrapper generation.
 """
 
+from typing import Optional
+import typing
 import yaml
 import sys
+import os
 import argparse
 import uuid
 from kubernetes import client, config
 from .kube_api_helpers import _kube_api_error_handling
 from ..cluster.auth import api_config_handler, config_check
+from os import urandom
+from base64 import b64encode
+from urllib3.util import parse_url
 
 
 def read_template(template):
@@ -44,130 +50,40 @@ def gen_names(name):
         return name, name
 
 
-def update_dashboard_route(route_item, cluster_name, namespace):
-    metadata = route_item.get("generictemplate", {}).get("metadata")
-    metadata["name"] = f"ray-dashboard-{cluster_name}"
-    metadata["namespace"] = namespace
-    metadata["labels"]["odh-ray-cluster-service"] = f"{cluster_name}-head-svc"
-    spec = route_item.get("generictemplate", {}).get("spec")
-    spec["to"]["name"] = f"{cluster_name}-head-svc"
+# Check if the routes api exists
+def is_openshift_cluster():
+    try:
+        config_check()
+        for api in client.ApisApi(api_config_handler()).get_api_versions().groups:
+            for v in api.versions:
+                if "route.openshift.io/v1" in v.group_version:
+                    return True
+        else:
+            return False
+    except Exception as e:  # pragma: no cover
+        return _kube_api_error_handling(e)
 
 
-# ToDo: refactor the update_x_route() functions
-def update_rayclient_route(route_item, cluster_name, namespace):
-    metadata = route_item.get("generictemplate", {}).get("metadata")
-    metadata["name"] = f"rayclient-{cluster_name}"
-    metadata["namespace"] = namespace
-    metadata["labels"]["odh-ray-cluster-service"] = f"{cluster_name}-head-svc"
-    spec = route_item.get("generictemplate", {}).get("spec")
-    spec["to"]["name"] = f"{cluster_name}-head-svc"
+def is_kind_cluster():
+    try:
+        config_check()
+        v1 = client.CoreV1Api()
+        label_selector = "kubernetes.io/hostname=kind-control-plane"
+        nodes = v1.list_node(label_selector=label_selector)
+        # If we find one or more nodes with the label, assume it's a KinD cluster
+        return len(nodes.items) > 0
+    except Exception as e:
+        print(f"Error checking if cluster is KinD: {e}")
+        return False
 
 
 def update_names(yaml, item, appwrapper_name, cluster_name, namespace):
     metadata = yaml.get("metadata")
     metadata["name"] = appwrapper_name
     metadata["namespace"] = namespace
-    lower_meta = item.get("generictemplate", {}).get("metadata")
-    lower_meta["labels"]["appwrapper.mcad.ibm.com"] = appwrapper_name
+    lower_meta = item.get("template", {}).get("metadata")
     lower_meta["name"] = cluster_name
     lower_meta["namespace"] = namespace
-
-
-def update_labels(yaml, instascale, instance_types):
-    metadata = yaml.get("metadata")
-    if instascale:
-        if not len(instance_types) > 0:
-            sys.exit(
-                "If instascale is set to true, must provide at least one instance type"
-            )
-        type_str = ""
-        for type in instance_types:
-            type_str += type + "_"
-        type_str = type_str[:-1]
-        metadata["labels"]["orderedinstance"] = type_str
-    else:
-        metadata.pop("labels")
-
-
-def update_priority(yaml, item, dispatch_priority, priority_val):
-    spec = yaml.get("spec")
-    if dispatch_priority is not None:
-        if priority_val:
-            spec["priority"] = priority_val
-        else:
-            raise ValueError(
-                "AW generation error: Priority value is None, while dispatch_priority is defined"
-            )
-        head = item.get("generictemplate").get("spec").get("headGroupSpec")
-        worker = item.get("generictemplate").get("spec").get("workerGroupSpecs")[0]
-        head["template"]["spec"]["priorityClassName"] = dispatch_priority
-        worker["template"]["spec"]["priorityClassName"] = dispatch_priority
-    else:
-        spec.pop("priority")
-
-
-def update_custompodresources(
-    item,
-    min_cpu,
-    max_cpu,
-    min_memory,
-    max_memory,
-    gpu,
-    workers,
-    head_cpus,
-    head_memory,
-    head_gpus,
-):
-    if "custompodresources" in item.keys():
-        custompodresources = item.get("custompodresources")
-        for i in range(len(custompodresources)):
-            resource = custompodresources[i]
-            if i == 0:
-                # Leave head node resources as template default
-                resource["requests"]["cpu"] = head_cpus
-                resource["limits"]["cpu"] = head_cpus
-                resource["requests"]["memory"] = str(head_memory) + "G"
-                resource["limits"]["memory"] = str(head_memory) + "G"
-                resource["requests"]["nvidia.com/gpu"] = head_gpus
-                resource["limits"]["nvidia.com/gpu"] = head_gpus
-
-            else:
-                for k, v in resource.items():
-                    if k == "replicas" and i == 1:
-                        resource[k] = workers
-                    if k == "requests" or k == "limits":
-                        for spec, _ in v.items():
-                            if spec == "cpu":
-                                if k == "limits":
-                                    resource[k][spec] = max_cpu
-                                else:
-                                    resource[k][spec] = min_cpu
-                            if spec == "memory":
-                                if k == "limits":
-                                    resource[k][spec] = str(max_memory) + "G"
-                                else:
-                                    resource[k][spec] = str(min_memory) + "G"
-                            if spec == "nvidia.com/gpu":
-                                if i == 0:
-                                    resource[k][spec] = 0
-                                else:
-                                    resource[k][spec] = gpu
-    else:
-        sys.exit("Error: malformed template")
-
-
-def update_affinity(spec, appwrapper_name, instascale):
-    if instascale:
-        node_selector_terms = (
-            spec.get("affinity")
-            .get("nodeAffinity")
-            .get("requiredDuringSchedulingIgnoredDuringExecution")
-            .get("nodeSelectorTerms")
-        )
-        node_selector_terms[0]["matchExpressions"][0]["values"][0] = appwrapper_name
-        node_selector_terms[0]["matchExpressions"][0]["key"] = appwrapper_name
-    else:
-        spec.pop("affinity")
 
 
 def update_image(spec, image):
@@ -199,12 +115,12 @@ def update_resources(spec, min_cpu, max_cpu, min_memory, max_memory, gpu):
         requests = resource.get("resources").get("requests")
         if requests is not None:
             requests["cpu"] = min_cpu
-            requests["memory"] = str(min_memory) + "G"
+            requests["memory"] = min_memory
             requests["nvidia.com/gpu"] = gpu
         limits = resource.get("resources").get("limits")
         if limits is not None:
             limits["cpu"] = max_cpu
-            limits["memory"] = str(max_memory) + "G"
+            limits["memory"] = max_memory
             limits["nvidia.com/gpu"] = gpu
 
 
@@ -218,18 +134,17 @@ def update_nodes(
     gpu,
     workers,
     image,
-    instascale,
     env,
     image_pull_secrets,
     head_cpus,
     head_memory,
     head_gpus,
 ):
-    if "generictemplate" in item.keys():
-        head = item.get("generictemplate").get("spec").get("headGroupSpec")
+    if "template" in item.keys():
+        head = item.get("template").get("spec").get("headGroupSpec")
         head["rayStartParams"]["num-gpus"] = str(int(head_gpus))
 
-        worker = item.get("generictemplate").get("spec").get("workerGroupSpecs")[0]
+        worker = item.get("template").get("spec").get("workerGroupSpecs")[0]
         # Head counts as first worker
         worker["replicas"] = workers
         worker["minReplicas"] = workers
@@ -239,7 +154,6 @@ def update_nodes(
 
         for comp in [head, worker]:
             spec = comp.get("template").get("spec")
-            update_affinity(spec, appwrapper_name, instascale)
             update_image_pull_secrets(spec, image_pull_secrets)
             update_image(spec, image)
             update_env(spec, env)
@@ -252,121 +166,127 @@ def update_nodes(
                 update_resources(spec, min_cpu, max_cpu, min_memory, max_memory, gpu)
 
 
-def update_ca_secret(ca_secret_item, cluster_name, namespace):
-    from . import generate_cert
-
-    metadata = ca_secret_item.get("generictemplate", {}).get("metadata")
-    metadata["name"] = f"ca-secret-{cluster_name}"
-    metadata["namespace"] = namespace
-    metadata["labels"]["odh-ray-cluster-service"] = f"{cluster_name}-head-svc"
-    data = ca_secret_item.get("generictemplate", {}).get("data")
-    data["ca.key"], data["ca.crt"] = generate_cert.generate_ca_cert(365)
-
-
-def enable_local_interactive(resources, cluster_name, namespace):
-    rayclient_route_item = resources["resources"].get("GenericItems")[2]
-    ca_secret_item = resources["resources"].get("GenericItems")[3]
-    item = resources["resources"].get("GenericItems")[0]
-    update_rayclient_route(rayclient_route_item, cluster_name, namespace)
-    update_ca_secret(ca_secret_item, cluster_name, namespace)
-    # update_ca_secret_volumes
-    item["generictemplate"]["spec"]["headGroupSpec"]["template"]["spec"]["volumes"][0][
-        "secret"
-    ]["secretName"] = f"ca-secret-{cluster_name}"
-    item["generictemplate"]["spec"]["workerGroupSpecs"][0]["template"]["spec"][
-        "volumes"
-    ][0]["secret"]["secretName"] = f"ca-secret-{cluster_name}"
-    # update_tls_env
-    item["generictemplate"]["spec"]["headGroupSpec"]["template"]["spec"]["containers"][
-        0
-    ]["env"][1]["value"] = "1"
-    item["generictemplate"]["spec"]["workerGroupSpecs"][0]["template"]["spec"][
-        "containers"
-    ][0]["env"][1]["value"] = "1"
-    # update_init_container
-    command = item["generictemplate"]["spec"]["headGroupSpec"]["template"]["spec"][
-        "initContainers"
-    ][0].get("command")[2]
-
-    command = command.replace("deployment-name", cluster_name)
-    try:
-        config_check()
-        api_client = client.CustomObjectsApi(api_config_handler())
-        ingress = api_client.get_cluster_custom_object(
-            "config.openshift.io", "v1", "ingresses", "cluster"
-        )
-    except Exception as e:  # pragma: no cover
-        return _kube_api_error_handling(e)
-    domain = ingress["spec"]["domain"]
-    command = command.replace("server-name", domain)
-
-    item["generictemplate"]["spec"]["headGroupSpec"]["template"]["spec"][
-        "initContainers"
-    ][0].get("command")[2] = command
-
-
-def disable_raycluster_tls(resources):
-    generic_template_spec = resources["GenericItems"][0]["generictemplate"]["spec"]
-
-    if "volumes" in generic_template_spec["headGroupSpec"]["template"]["spec"]:
-        del generic_template_spec["headGroupSpec"]["template"]["spec"]["volumes"]
-
-    if (
-        "volumeMounts"
-        in generic_template_spec["headGroupSpec"]["template"]["spec"]["containers"][0]
-    ):
-        del generic_template_spec["headGroupSpec"]["template"]["spec"]["containers"][0][
-            "volumeMounts"
-        ]
-
-    if "initContainers" in generic_template_spec["headGroupSpec"]["template"]["spec"]:
-        del generic_template_spec["headGroupSpec"]["template"]["spec"]["initContainers"]
-
-    if "volumes" in generic_template_spec["workerGroupSpecs"][0]["template"]["spec"]:
-        del generic_template_spec["workerGroupSpecs"][0]["template"]["spec"]["volumes"]
-
-    if (
-        "volumeMounts"
-        in generic_template_spec["workerGroupSpecs"][0]["template"]["spec"][
-            "containers"
-        ][0]
-    ):
-        del generic_template_spec["workerGroupSpecs"][0]["template"]["spec"][
-            "containers"
-        ][0]["volumeMounts"]
-
-    for i in range(
-        len(
-            generic_template_spec["workerGroupSpecs"][0]["template"]["spec"][
-                "initContainers"
-            ]
-        )
-    ):
-        if (
-            generic_template_spec["workerGroupSpecs"][0]["template"]["spec"][
-                "initContainers"
-            ][i]["name"]
-            == "create-cert"
-        ):
-            del generic_template_spec["workerGroupSpecs"][0]["template"]["spec"][
-                "initContainers"
-            ][i]
-
-    updated_items = []
-    for i in resources["GenericItems"][:]:
-        if "rayclient-deployment-name" in i["generictemplate"]["metadata"]["name"]:
-            continue
-        if "ca-secret-deployment-name" in i["generictemplate"]["metadata"]["name"]:
-            continue
-        updated_items.append(i)
-
-    resources["GenericItems"] = updated_items
+def del_from_list_by_name(l: list, target: typing.List[str]) -> list:
+    return [x for x in l if x["name"] not in target]
 
 
 def write_user_appwrapper(user_yaml, output_file_name):
+    # Create the directory if it doesn't exist
+    directory_path = os.path.dirname(output_file_name)
+    if not os.path.exists(directory_path):
+        os.makedirs(directory_path)
+
     with open(output_file_name, "w") as outfile:
         yaml.dump(user_yaml, outfile, default_flow_style=False)
+
     print(f"Written to: {output_file_name}")
+
+
+def get_default_kueue_name(namespace: str):
+    # If the local queue is set, use it. Otherwise, try to use the default queue.
+    try:
+        config_check()
+        api_instance = client.CustomObjectsApi(api_config_handler())
+        local_queues = api_instance.list_namespaced_custom_object(
+            group="kueue.x-k8s.io",
+            version="v1beta1",
+            namespace=namespace,
+            plural="localqueues",
+        )
+    except Exception as e:  # pragma: no cover
+        return _kube_api_error_handling(e)
+    for lq in local_queues["items"]:
+        if (
+            "annotations" in lq["metadata"]
+            and "kueue.x-k8s.io/default-queue" in lq["metadata"]["annotations"]
+            and lq["metadata"]["annotations"]["kueue.x-k8s.io/default-queue"].lower()
+            == "true"
+        ):
+            return lq["metadata"]["name"]
+    raise ValueError(
+        "Default Local Queue with kueue.x-k8s.io/default-queue: true annotation not found please create a default Local Queue or provide the local_queue name in Cluster Configuration"
+    )
+
+
+def local_queue_exists(namespace: str, local_queue_name: str):
+    # get all local queues in the namespace
+    try:
+        config_check()
+        api_instance = client.CustomObjectsApi(api_config_handler())
+        local_queues = api_instance.list_namespaced_custom_object(
+            group="kueue.x-k8s.io",
+            version="v1beta1",
+            namespace=namespace,
+            plural="localqueues",
+        )
+    except Exception as e:  # pragma: no cover
+        return _kube_api_error_handling(e)
+    # check if local queue with the name provided in cluster config exists
+    for lq in local_queues["items"]:
+        if lq["metadata"]["name"] == local_queue_name:
+            return True
+    return False
+
+
+def add_queue_label(item: dict, namespace: str, local_queue: Optional[str]):
+    lq_name = local_queue or get_default_kueue_name(namespace)
+    if not local_queue_exists(namespace, lq_name):
+        raise ValueError(
+            "local_queue provided does not exist or is not in this namespace. Please provide the correct local_queue name in Cluster Configuration"
+        )
+    if not "labels" in item["metadata"]:
+        item["metadata"]["labels"] = {}
+    item["metadata"]["labels"].update({"kueue.x-k8s.io/queue-name": lq_name})
+
+
+def augment_labels(item: dict, labels: dict):
+    if "template" in item:
+        if not "labels" in item["template"]["metadata"]:
+            item["template"]["metadata"]["labels"] = {}
+    item["template"]["metadata"]["labels"].update(labels)
+
+
+def write_components(
+    user_yaml: dict,
+    output_file_name: str,
+):
+    # Create the directory if it doesn't exist
+    directory_path = os.path.dirname(output_file_name)
+    if not os.path.exists(directory_path):
+        os.makedirs(directory_path)
+
+    components = user_yaml.get("spec", "resources").get("components")
+    open(output_file_name, "w").close()
+    with open(output_file_name, "a") as outfile:
+        for component in components:
+            if "template" in component:
+                outfile.write("---\n")
+                yaml.dump(component["template"], outfile, default_flow_style=False)
+    print(f"Written to: {output_file_name}")
+
+
+def load_components(
+    user_yaml: dict,
+    name: str,
+):
+    component_list = []
+    components = user_yaml.get("spec", "resources").get("components")
+    for component in components:
+        if "template" in component:
+            component_list.append(component["template"])
+
+    resources = "---\n" + "---\n".join(
+        [yaml.dump(component) for component in component_list]
+    )
+    user_yaml = resources
+    print(f"Yaml resources loaded for {name}")
+    return user_yaml
+
+
+def load_appwrapper(user_yaml: dict, name: str):
+    user_yaml = yaml.dump(user_yaml)
+    print(f"Yaml resources loaded for {name}")
+    return user_yaml
 
 
 def generate_appwrapper(
@@ -383,33 +303,25 @@ def generate_appwrapper(
     workers: int,
     template: str,
     image: str,
-    instascale: bool,
+    appwrapper: bool,
     instance_types: list,
     env,
-    local_interactive: bool,
     image_pull_secrets: list,
-    dispatch_priority: str,
-    priority_val: int,
+    write_to_file: bool,
+    verify_tls: bool,
+    local_queue: Optional[str],
+    labels,
 ):
     user_yaml = read_template(template)
     appwrapper_name, cluster_name = gen_names(name)
     resources = user_yaml.get("spec", "resources")
-    item = resources["resources"].get("GenericItems")[0]
-    route_item = resources["resources"].get("GenericItems")[1]
-    update_names(user_yaml, item, appwrapper_name, cluster_name, namespace)
-    update_labels(user_yaml, instascale, instance_types)
-    update_priority(user_yaml, item, dispatch_priority, priority_val)
-    update_custompodresources(
+    item = resources.get("components")[0]
+    update_names(
+        user_yaml,
         item,
-        min_cpu,
-        max_cpu,
-        min_memory,
-        max_memory,
-        gpu,
-        workers,
-        head_cpus,
-        head_memory,
-        head_gpus,
+        appwrapper_name,
+        cluster_name,
+        namespace,
     )
     update_nodes(
         item,
@@ -421,18 +333,32 @@ def generate_appwrapper(
         gpu,
         workers,
         image,
-        instascale,
         env,
         image_pull_secrets,
         head_cpus,
         head_memory,
         head_gpus,
     )
-    update_dashboard_route(route_item, cluster_name, namespace)
-    if local_interactive:
-        enable_local_interactive(resources, cluster_name, namespace)
+
+    augment_labels(item, labels)
+
+    if appwrapper:
+        add_queue_label(user_yaml, namespace, local_queue)
     else:
-        disable_raycluster_tls(resources["resources"])
-    outfile = appwrapper_name + ".yaml"
-    write_user_appwrapper(user_yaml, outfile)
-    return outfile
+        add_queue_label(item["template"], namespace, local_queue)
+
+    directory_path = os.path.expanduser("~/.codeflare/resources/")
+    outfile = os.path.join(directory_path, appwrapper_name + ".yaml")
+
+    if write_to_file:
+        if appwrapper:
+            write_user_appwrapper(user_yaml, outfile)
+        else:
+            write_components(user_yaml, outfile)
+        return outfile
+    else:
+        if appwrapper:
+            user_yaml = load_appwrapper(user_yaml, name)
+        else:
+            user_yaml = load_components(user_yaml, name)
+        return user_yaml

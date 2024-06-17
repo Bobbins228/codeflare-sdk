@@ -37,9 +37,9 @@ jobs:
             PR_BRANCH_NAME: adjustments-release-${{ github.event.inputs.release-version }}
         steps:
             - name: Checkout the repository
-              uses: actions/checkout@v3
+              uses: actions/checkout@v4
             - name: Install Python
-              uses: actions/setup-python@v4
+              uses: actions/setup-python@v5
               with:
                 python-version: ${{ github.event.inputs.python_version }}
             - name: Install Poetry
@@ -53,7 +53,7 @@ jobs:
             - name: Run poetry build
               run: poetry build
             - name: Create new documentation
-              run: poetry run pdoc --html -o docs src/codeflare_sdk && pushd docs && rm -rf cluster job utils && mv codeflare_sdk/* . && rm -rf codeflare_sdk && popd && find docs -type f -name "*.html" -exec bash -c "echo '' >> {}" \;
+              run: poetry run pdoc --html -o docs/detailed-documentation src/codeflare_sdk && pushd docs/detailed-documentation && rm -rf cluster job utils && mv codeflare_sdk/* . && rm -rf codeflare_sdk && popd && find docs/detailed-documentation -type f -name "*.html" -exec bash -c "echo '' >> {}" \;
 
             - name: Commit changes in docs
               uses: stefanzweifel/git-auto-commit-action@v4
@@ -81,6 +81,7 @@ jobs:
               uses: ncipollo/release-action@v1
               with:
                   tag: "v${{ github.event.inputs.release-version }}"
+                  generateReleaseNotes: true
             - name: Publish package distributions to PyPI
               uses: pypa/gh-action-pypi-publish@release/v1
 
@@ -97,6 +98,18 @@ jobs:
                 sleep 5
                 run_id=$(gh run list --workflow image-build-and-push.yaml --repo ${{ github.event.inputs.codeflare-repository-organization }}/codeflare-sdk --limit 1 --json databaseId --jq .[].databaseId)
                 gh run watch ${run_id} --repo ${{ github.event.inputs.codeflare-repository-organization }}/codeflare-sdk --interval 10 --exit-status
+              env:
+                GITHUB_TOKEN: ${{ secrets.CODEFLARE_MACHINE_ACCOUNT_TOKEN }}
+              shell: bash
+
+            - name: Sync ODH Notebooks
+              run: |
+                gh workflow run odh-notebooks-sync.yml \
+                  --repo ${{ github.event.inputs.codeflare-repository-organization }}/codeflare-sdk \
+                  --ref ${{ github.ref }} \
+                  --field upstream-repository-organization=opendatahub-io \
+                  --field codeflare-repository-organization=${{ github.event.inputs.codeflare-repository-organization }} \
+                  --field codeflare_sdk_release_version=${{ github.event.inputs.release-version }}
               env:
                 GITHUB_TOKEN: ${{ secrets.CODEFLARE_MACHINE_ACCOUNT_TOKEN }}
               shell: bash

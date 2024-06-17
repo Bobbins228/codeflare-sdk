@@ -25,10 +25,14 @@ import os
 import urllib3
 from ..utils.kube_api_helpers import _kube_api_error_handling
 
+from typing import Optional
+
 global api_client
 api_client = None
 global config_path
 config_path = None
+
+WORKBENCH_CA_CERT_PATH = "/etc/pki/tls/custom-certs/ca-bundle.crt"
 
 
 class Authentication(metaclass=abc.ABCMeta):
@@ -89,7 +93,17 @@ class TokenAuthentication(Authentication):
         self.token = token
         self.server = server
         self.skip_tls = skip_tls
-        self.ca_cert_path = ca_cert_path
+        self.ca_cert_path = self._gen_ca_cert_path(ca_cert_path)
+
+    def _gen_ca_cert_path(self, ca_cert_path: str):
+        if ca_cert_path is not None:
+            return ca_cert_path
+        elif "CF_SDK_CA_CERT_PATH" in os.environ:
+            return os.environ.get("CF_SDK_CA_CERT_PATH")
+        elif os.path.exists(WORKBENCH_CA_CERT_PATH):
+            return WORKBENCH_CA_CERT_PATH
+        else:
+            return None
 
     def login(self) -> str:
         """
@@ -104,10 +118,20 @@ class TokenAuthentication(Authentication):
             configuration.api_key_prefix["authorization"] = "Bearer"
             configuration.host = self.server
             configuration.api_key["authorization"] = self.token
-            if self.skip_tls == False and self.ca_cert_path == None:
+
+            if not self.skip_tls:
+                if self.ca_cert_path is None:
+                    configuration.ssl_ca_cert = None
+                elif os.path.isfile(self.ca_cert_path):
+                    print(
+                        f"Authenticated with certificate located at {self.ca_cert_path}"
+                    )
+                    configuration.ssl_ca_cert = self.ca_cert_path
+                else:
+                    raise FileNotFoundError(
+                        f"Certificate file not found at {self.ca_cert_path}"
+                    )
                 configuration.verify_ssl = True
-            elif self.skip_tls == False:
-                configuration.ssl_ca_cert = self.ca_cert_path
             else:
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
                 print("Insecure request warnings have been disabled")
@@ -117,9 +141,8 @@ class TokenAuthentication(Authentication):
             client.AuthenticationApi(api_client).get_api_group()
             config_path = None
             return "Logged into %s" % self.server
-        except client.ApiException:  # pragma: no cover
-            api_client = None
-            print("Authentication Error please provide the correct token + server")
+        except client.ApiException as e:
+            _kube_api_error_handling(e)
 
     def logout(self) -> str:
         """
@@ -188,7 +211,7 @@ def config_check() -> str:
         return config_path
 
 
-def api_config_handler() -> str:
+def api_config_handler() -> Optional[client.ApiClient]:
     """
     This function is used to load the api client if the user has logged in
     """
