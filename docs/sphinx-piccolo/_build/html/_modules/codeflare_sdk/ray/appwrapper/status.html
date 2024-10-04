@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html  lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>codeflare_sdk.ray.appwrapper.status</title>
+
+          <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+          <link rel="stylesheet" href="../../../../_static/theme.css " type="text/css" />
+
+      <!-- sphinx script_files -->
+        <script src="../../../../_static/documentation_options.js?v=6fd3a282"></script>
+        <script src="../../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+
+
+      <!-- bundled in js (rollup iife) -->
+      <!-- <script src="../../../../_static/theme-vendors.js"></script> -->
+      <script src="../../../../_static/theme.js" defer></script>
+
+  <link rel="index" title="Index" href="../../../../genindex.html" />
+  <link rel="search" title="Search" href="../../../../search.html" />
+  </head>
+
+  <body>
+    <div id="app">
+    <div class="theme-container" :class="pageClasses"><navbar @toggle-sidebar="toggleSidebar">
+  <router-link to="../../../../index.html" class="home-link">
+
+      <span class="site-name">CodeFlare SDK</span>
+
+  </router-link>
+
+  <div class="links">
+    <navlinks class="can-hide">
+
+
+
+    </navlinks>
+  </div>
+</navbar>
+
+
+      <div class="sidebar-mask" @click="toggleSidebar(false)">
+      </div>
+        <sidebar @toggle-sidebar="toggleSidebar">
+
+          <navlinks>
+
+
+
+
+
+          </navlinks><div id="searchbox" class="searchbox" role="search">
+  <div class="caption"><span class="caption-text">Quick search</span>
+    <div class="searchformwrapper">
+      <form class="search" action="../../../../search.html" method="get">
+        <input type="text" name="q" />
+        <input type="submit" value="Search" />
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div><div class="sidebar-links" role="navigation" aria-label="main navigation">
+
+    <div class="sidebar-group">
+      <p class="caption">
+        <span class="caption-text"><a href="../../../../index.html#codeflare-sdk-documentation">Contents:</a></span>
+      </p>
+      <ul class="">
+
+      </ul>
+    </div>
+
+</div>
+        </sidebar>
+
+      <page>
+          <div class="body-header" role="navigation" aria-label="navigation">
+
+  <ul class="breadcrumbs">
+    <li><a href="../../../../index.html">Docs</a> &raquo;</li>
+
+      <li><a href="../../../index.html">Module code</a> &raquo;</li>
+
+    <li>codeflare_sdk.ray.appwrapper.status</li>
+  </ul>
+
+
+  <ul class="page-nav">
+</ul>
+
+</div>
+<hr>
+          <div class="content" role="main" v-pre>
+
+  <h1>Source code for codeflare_sdk.ray.appwrapper.status</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright 2024 IBM, Red Hat</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1">#      http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">The status sub-module defines Enums containing information for</span>
+<span class="sd">AppWrapper states, as well as dataclasses to store information for AppWrappers.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
+
+
+<div class="viewcode-block" id="AppWrapperStatus">
+<a class="viewcode-back" href="../../../../codeflare_sdk.ray.appwrapper.html#codeflare_sdk.ray.appwrapper.status.AppWrapperStatus">[docs]</a>
+<span class="k">class</span> <span class="nc">AppWrapperStatus</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Defines the possible reportable phases of an AppWrapper.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">SUSPENDED</span> <span class="o">=</span> <span class="s2">&quot;suspended&quot;</span>
+    <span class="n">RESUMING</span> <span class="o">=</span> <span class="s2">&quot;resuming&quot;</span>
+    <span class="n">RUNNING</span> <span class="o">=</span> <span class="s2">&quot;running&quot;</span>
+    <span class="n">RESETTING</span> <span class="o">=</span> <span class="s2">&quot;resetting&quot;</span>
+    <span class="n">SUSPENDING</span> <span class="o">=</span> <span class="s2">&quot;suspending&quot;</span>
+    <span class="n">SUCCEEDED</span> <span class="o">=</span> <span class="s2">&quot;succeeded&quot;</span>
+    <span class="n">FAILED</span> <span class="o">=</span> <span class="s2">&quot;failed&quot;</span>
+    <span class="n">TERMINATING</span> <span class="o">=</span> <span class="s2">&quot;terminating&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="AppWrapper">
+<a class="viewcode-back" href="../../../../codeflare_sdk.ray.appwrapper.html#codeflare_sdk.ray.appwrapper.status.AppWrapper">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">AppWrapper</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    For storing information about an AppWrapper.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">status</span><span class="p">:</span> <span class="n">AppWrapperStatus</span></div>
+
+</pre></div>
+
+          </div>
+          <div class="page-nav">
+            <div class="inner"><ul class="page-nav">
+</ul><div class="footer" role="contentinfo">
+      &#169; Copyright 2024, Project CodeFlare.
+    <br>
+    Created using <a href="http://sphinx-doc.org/">Sphinx</a> 7.4.7 with <a href="https://github.com/schettino72/sphinx_press_theme">Press Theme</a> 0.9.1.
+</div>
+            </div>
+          </div>
+      </page>
+    </div></div>
+
+
+  </body>
+</html>
