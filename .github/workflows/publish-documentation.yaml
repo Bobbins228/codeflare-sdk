@@ -1,0 +1,40 @@
+name: documentation
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.9
+      - name: Install Sphinx
+        run: |
+            sudo apt-get update
+            sudo apt-get install python3-sphinx
+      - name: Install Poetry
+        uses: abatilo/actions-poetry@v2
+        with:
+          poetry-version: 1.8.3
+      - name: Run poetry install
+        run: poetry install --with docs
+      - name: Create new documentation
+        run: |
+          sphinx-apidoc -o docs/sphinx src/codeflare_sdk "**/*test_*" --force
+          make clean -C docs/sphinx
+          make html -C docs/sphinx
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          publish_branch: sphinx-documentation
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: sphinx/_build/
+          force_orphan: true
