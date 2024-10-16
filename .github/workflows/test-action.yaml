@@ -1,0 +1,28 @@
+name: Test Action
+
+on:
+    workflow_dispatch:
+        inputs:
+            release-version:
+              type: string
+              required: true
+              description: 'Version number (for example: 0.1.0)'
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            id-token: write  # This permission is required for trusted publishing
+        steps:
+            - name: My first step - check out repository
+              uses: actions/checkout@v4
+            - name: Create new documentation
+              uses: ./.github/actions/publish-documentation
+              with:
+                codeflare_sdk_release_version: ${{ github.event.inputs.release-version }}
+            - name: Test waited for action
+              run: echo "Dummy Data"
+              env:
+                GITHUB_TOKEN: ${{ secrets.CODEFLARE_MACHINE_ACCOUNT_TOKEN }}
+              shell: bash
