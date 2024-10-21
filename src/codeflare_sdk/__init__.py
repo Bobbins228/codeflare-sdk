@@ -12,6 +12,8 @@ from .ray import (
     RayJobClient,
 )
 
+from .kubeflow import TrainingClient
+
 from .common.widgets import view_clusters
 
 from .common import (
