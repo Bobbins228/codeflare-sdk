@@ -43,7 +43,7 @@ class RayClusterManagerWidgets:
     """
 
     def __init__(self, ray_clusters_df: pd.DataFrame, namespace: str = None):
-        from ...ray.cluster.cluster import get_current_namespace
+        from ...common.utils.utils import get_current_namespace
 
         # Data
         self.ray_clusters_df = ray_clusters_df
@@ -307,7 +307,7 @@ def view_clusters(namespace: str = None):
         )
         return  # Exit function if not in Jupyter Notebook
 
-    from ...ray.cluster.cluster import get_current_namespace
+    from ...common.utils.utils import get_current_namespace
 
     if not namespace:
         namespace = get_current_namespace()

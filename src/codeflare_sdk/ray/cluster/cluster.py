@@ -56,6 +56,7 @@ import requests
 
 from kubernetes import config
 from kubernetes.client.rest import ApiException
+from ...common.utils.utils import get_current_namespace
 
 
 class Cluster:
@@ -571,25 +572,6 @@ def list_all_queued(
         if print_to_console:
             pretty_print.print_ray_clusters_status(resources)
     return resources
-
-
-def get_current_namespace():  # pragma: no cover
-    if os.path.isfile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"):
-        try:
-            file = open("/var/run/secrets/kubernetes.io/serviceaccount/namespace", "r")
-            active_context = file.readline().strip("\n")
-            return active_context
-        except Exception as e:
-            print("Unable to find current namespace")
-    print("trying to gather from current context")
-    try:
-        _, active_context = config.list_kube_config_contexts(config_check())
-    except Exception as e:
-        return _kube_api_error_handling(e)
-    try:
-        return active_context["context"]["namespace"]
-    except KeyError:
-        return None
 
 
 def get_cluster(

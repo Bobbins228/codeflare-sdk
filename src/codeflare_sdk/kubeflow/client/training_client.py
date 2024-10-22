@@ -3,7 +3,7 @@ from kubeflow.training.api_client import ApiClient
 from kubeflow.training.constants import constants
 from kubeflow.training import models
 
-from ...ray.cluster.cluster import get_current_namespace
+from ...common.utils.utils import get_current_namespace
 from ...common.kubernetes_cluster.auth import config_check, get_api_client
 from kubernetes import client
 from typing import Optional, Union, Dict, List, Callable, Any, Set, Tuple
